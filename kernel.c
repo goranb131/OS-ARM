@@ -28,7 +28,6 @@ extern void enter_usermode(unsigned long pc, unsigned long sp)
 extern void _user_start(void);
 extern void process3(void);      
 
-
 void print_mmu_blocks(void)
 {
     uart_puts("MMU L1 Block 0: "); uart_hex(mmu_get_l1_block(0)); uart_puts("\n");
@@ -105,7 +104,6 @@ void handle_irq(void)
         timer_handler();
 }
 
-
 static struct vfs_super_block* test_mount(void)
 {
     struct vfs_super_block* sb = kalloc(sizeof(*sb));
@@ -135,6 +133,7 @@ void test_exec(void)
     send_message(&msg);
 }
 
+/* old _user_entry stays but not used anymore */
 void _user_entry(void)
 {
     asm volatile("brk #0");

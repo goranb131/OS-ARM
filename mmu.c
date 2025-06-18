@@ -1,13 +1,14 @@
+// mmu.c  – two 1 GiB identity blocks, tables
 #include <stdint.h>
 #include "uart.h"
 
-/* MAIR: AttrIdx0 = normal WB/WA, AttrIdx1 = device-nGnRnE */
+/* AttrIdx0 = normal WB/WA, AttrIdx1 = device-nGnRnE */
 #define MAIR_VALUE  ((0xFFULL << 0) | (0x04ULL << 8))
 
 #define AF           (1ULL << 10)
 #define UXN          (1ULL << 54)
-#define AP_RW_EL0    (1ULL << 6)          
-#define AP_RW_EL1    (0ULL << 6)          
+#define AP_RW_EL0    (1ULL << 6)          /* AP[1:0]=0b01 */
+#define AP_RW_EL1    (0ULL << 6)          /* AP[1:0]=0b00 */
 #define BLOCK        (0ULL << 1)
 #define VALID        (1ULL << 0)
 #define ATTRIDX(n)  ((uint64_t)(n) << 2)
@@ -27,8 +28,8 @@ static inline void enable_mmu(void)
 {
     __asm__ volatile(
         "mrs  x0, sctlr_el1\n"
-        "orr  x0, x0, #1\n"            /* M = 1 */
-        "bic  x0, x0, #(1<<28)\n"      /* SA0 = 0 */
+        "orr  x0, x0, #1\n"            
+        "bic  x0, x0, #(1<<28)\n"      
         "msr  sctlr_el1, x0");
     isb();
 }
@@ -46,19 +47,22 @@ static inline void write_sctlr(uint64_t v)
     isb();
 }
 
-/* ------------------------------------------------------------------ */
 void mmu_init(void)
 {
     uart_puts("MMU init start\n");
 
-/* 0-1 GiB - devices (UART)           EL1 RW, UXN */
-l1[0] = L1_DESC(0, 1, UXN | AP_RW_EL1);
+/* 0-1 GiB devices (UART) EL1 RW, UXN */
+//l1[0] = L1_DESC(0, 1, UXN | AP_RW_EL1);
+l1[0] = L1_DESC(0,      /* physical GiB */
+                1,      /* AttrIdx1 = device */
+                UXN | AP_RW_EL0);   // was AP_RW_EL1
 
-/* 1-2 GiB - kernel                   EL1 RW/X    */
-l1[1] = L1_DESC(1, 0,        AP_RW_EL1);
+/* 1-2 GiB kernel EL1 RW/X*/
+l1[1] = L1_DESC(1, 0, AP_RW_EL1);
 
-/* 2-3 GiB - user code+stack          EL0 RW/X    */
-l1[2] = L1_DESC(2, 0,        AP_RW_EL0);
+/* 2-3 GiB user code+stack  EL0 RW/X*/
+l1[2] = L1_DESC(2, 0, AP_RW_EL0);
+
 
     uart_puts("L1 identity blocks set\n");
 
@@ -72,9 +76,9 @@ l1[2] = L1_DESC(2, 0,        AP_RW_EL0);
     enable_mmu();                           uart_puts("MMU enabled\n");
 
     
-    write_sctlr(read_sctlr() & ~1ULL);   
-    uart_puts("MMU really was on; turning it back OFF works\n");
-
+    /* temporary */
+    //write_sctlr(read_sctlr() & ~1ULL);   // MMU off again
+    //uart_puts("MMU really was on; turning it back OFF works\n");
 
     extern void exception_vector_table(void);
     __asm__ volatile("msr vbar_el1,%0"::"r"(&exception_vector_table));

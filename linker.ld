@@ -35,7 +35,6 @@ SECTIONS
 
   . = ALIGN(16);
 
-
   /*  user_stack_bottom = low address
       user_stack_top    = high address */
   user_stack_bottom = .;
@@ -50,8 +49,9 @@ SECTIONS
   stack_top = . + 0x4000;
 
    /* ───────────────────────────────────────────────
-     EL0 test-code goes at 0x8000 0000 (1 GiB above
-     the kernel’s identity-mapped region)
+     EL0 test code to 0x8000 0000 (1 GiB above
+     the kernel identity-mapped region)
      ─────────────────────────────────────────────── */
+  .user 0x80000000 : { *(.text.user) }
   .user 0x80000000 : { *(.user) }
 }
