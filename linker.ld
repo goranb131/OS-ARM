@@ -48,4 +48,10 @@ SECTIONS
        stack_top = high address 
   */
   stack_top = . + 0x4000;
+
+   /* ───────────────────────────────────────────────
+     EL0 test-code goes at 0x8000 0000 (1 GiB above
+     the kernel’s identity-mapped region)
+     ─────────────────────────────────────────────── */
+  .user 0x80000000 : { *(.user) }
 }
