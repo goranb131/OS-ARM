@@ -4,7 +4,7 @@ AS      = clang
 CFLAGS  = --target=aarch64-elf -march=armv8-a -ffreestanding -nostdlib -Iinclude
 LDFLAGS = -fuse-ld=lld -T linker.ld
 
-OBJS = boot.o enter_usermode.o kernel.o uart.o ramfs.o exceptions.o timer.o gic.o mmu.o process.o context_switch.o process_test.o vfs.o kmalloc.o string.o abyssfs.o message.o namespace.o shell.o
+OBJS = boot.o enter_usermode.o kernel.o uart.o ramfs.o exceptions.o timer.o gic.o mmu.o process.o context_switch.o process_test.o vfs.o kmalloc.o string.o abyssfs.o message.o namespace.o shell.o uart_debug.o 
 
 all: kernel.elf
 
