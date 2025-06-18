@@ -1,4 +1,4 @@
-// exceptions.S – EL1 vector table + tiny diagnostic print
+// exceptions.S – EL1 vector table + print
     .section .text
     .align   11                       // 2 KiB alignment (QEMU requirement)
     .global  exception_vector_table
