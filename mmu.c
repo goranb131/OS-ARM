@@ -1,94 +1,66 @@
+// mmu.c  – two 1 GiB identity blocks, block 0 = device, block 1 = normal
 #include <stdint.h>
 #include "uart.h"
+/*
+ *   AttrIdx0 = 0xFF  (normal)
+ *   AttrIdx1 = 0x04  (device - nGnRnE)
+*/
+#define MAIR_VALUE  ((0xFFULL << 0) | (0x04ULL << 8))
 
-#define NUM_ENTRIES    512
-#define MAIR_NORMAL    0xFF       
-#define MAIR_DEVICE    0x04       
-#define MAIR_SHIFT     2
+/* page table attribute bits */
+#define AF          (1ULL << 10)
+#define UXN         (1ULL << 54)
+#define BLOCK_DESC  (0ULL << 1)
+#define VALID       (1ULL << 0)
 
-#define ACCESS_FLAG    (1ULL << 10)
-#define UXN            (1ULL << 54)
-#define VALID_DESC     (1ULL << 0)
-#define BLOCK_DESC     (0ULL << 1)
+#define ATTRIDX(n)  ((uint64_t)(n) << 2)     /* bits[4:2] in a block desc */
+#define L1_BLOCK(pa_mb, attridx, extra) \
+        (((uint64_t)(pa_mb) << 30) | AF | ATTRIDX(attridx) | (extra) | \
+         BLOCK_DESC | VALID)
 
-__attribute__((aligned(4096))) static uint64_t l1_table[NUM_ENTRIES];
+__attribute__((aligned(4096))) static uint64_t l1[512];
 
-void mmu_init(void) {
+static inline void  isb(void)   { __asm__ volatile("isb"); }
+static inline void  write_mair(uint64_t v)
+{ __asm__ volatile("msr mair_el1,%0"::"r"(v):"memory"); }
+static inline void  write_tcr (uint64_t v)
+{ __asm__ volatile("msr tcr_el1,%0"::"r"(v):"memory"); }
+static inline void  write_ttbr0(void *tbl)
+{ __asm__ volatile("msr ttbr0_el1,%0"::"r"(tbl):"memory"); }
+static inline void  enable_mmu(void)
+{
+    __asm__ volatile(
+        "mrs x0, sctlr_el1\n"
+        "orr x0, x0, #1\n"          /* set M   */
+        "bic x0, x0, #(1<<28)\n"    /* clear SA0 (just in case) */
+        "msr sctlr_el1, x0");
+    isb();
+}
+
+void mmu_init(void)
+{
     uart_puts("MMU init start\n");
 
-    
-    for (int i = 0; i < NUM_ENTRIES; i++) {
-        l1_table[i] = 0;
-    }
+    /* 0-1 GiB this is where UART is  */
+    l1[0] = L1_BLOCK(0, 1 /*AttrIdx1*/, UXN);
 
-    
-    asm volatile(
-        "mov x1, %[mair0]\n"
-        "orr x1, x1, %[mair1]\n"
-        "msr mair_el1, x1\n"
-        "isb\n"
-        :
-        : [mair0]"i"(MAIR_NORMAL),
-          [mair1]"i"(MAIR_DEVICE << 8)
-        : "x1", "memory"
-    );
-    uart_puts("MAIR set\n");
+    /* 1-2 GiB kernel text+data */
+    l1[1] = L1_BLOCK(1, 0 /*AttrIdx0*/, 0);
 
-    
-    l1_table[0] = (0ULL << 30)        
-                | ACCESS_FLAG
-                | UXN                 
-                | BLOCK_DESC
-                | VALID_DESC;
-
-    
-    l1_table[1] = (1ULL << 30)        
-                | ACCESS_FLAG
-                /* no UXN exec OK in EL0 */
-                | BLOCK_DESC
-                | VALID_DESC;
     uart_puts("L1 identity blocks set\n");
 
-    
-    asm volatile(
-        "msr ttbr0_el1, %0\n"
-        "isb\n"
-        :: "r"(l1_table)
-        : "memory"
-    );
-    uart_puts("TTBR0 set\n");
+    write_mair(MAIR_VALUE);      uart_puts("MAIR set\n");
 
-    
-    asm volatile(
-        "mov x1, #0x19\n"            
-        "orr x1, x1, #(2 << 8)\n"    
-        "orr x1, x1, #(2 << 10)\n"   
-        "orr x1, x1, #(3 << 12)\n"   
-        "msr tcr_el1, x1\n"
-        "isb\n"
-        ::: "x1", "memory"
-    );
-    uart_puts("TCR set\n");
+    write_tcr(0x00000000808519ULL);  uart_puts("TCR set\n");
 
-    
+    write_ttbr0(l1);             uart_puts("TTBR0 set\n");
+
     uart_puts("Enabling MMU...\n");
-    asm volatile(
-        "mrs x1, sctlr_el1\n"
-        "orr x1, x1, #1\n"   
-        "msr sctlr_el1, x1\n"
-        "isb\n"
-        ::: "x1", "memory"
-    );
-    uart_puts("MMU enabled\n");
+    enable_mmu();                uart_puts("MMU enabled\n");
 
-     
     extern void exception_vector_table(void);
-    asm volatile("msr vbar_el1, %0; isb" :: "r"(&exception_vector_table));
-
+    __asm__ volatile("msr vbar_el1,%0"::"r"(&exception_vector_table));
+    isb();
 }
 
-
-uint64_t mmu_get_l1_block(int i) {
-    extern uint64_t l1_table[]; 
-    return l1_table[i];
-}
+uint64_t mmu_get_l1_block(int idx) { return l1[idx]; }
