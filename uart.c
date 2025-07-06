@@ -12,6 +12,8 @@
 #define UART_CR     (UART_BASE + 0x30)
 #define UART_IFLS   (UART_BASE + 0x34)
 #define UART_IMSC   (UART_BASE + 0x38)
+#define UART_IBRD   (UART_BASE + 0x24)
+#define UART_FBRD   (UART_BASE + 0x28)
 
 #define FR_TXFF     (1 << 5)  
 #define FR_RXFE     (1 << 4)  
@@ -70,6 +72,7 @@ void uart_hex(unsigned long n) {
 }
 
 char uart_getc(void) {
-    while (mmio_read(UART_FR) & FR_RXFE) { }  
-    return mmio_read(UART_DR) & 0xFF;  
+    //return 'Z';    // Uncomment for test but doesnt print
+    while (mmio_read(UART_FR) & FR_RXFE) { }
+    return mmio_read(UART_DR) & 0xFF;
 }

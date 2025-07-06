@@ -1,3 +1,5 @@
+// process.c
+
 #include "process.h"
 #include "uart.h"   
 #include "message.h"
@@ -195,8 +197,8 @@ struct process* create_process(void) {
     new->ctx.sp = new->sp;
     
     
-    extern void process3(void);  
-    new->ctx.lr = (unsigned long)process3;
+    //extern void process3(void);  
+    //new->ctx.lr = (unsigned long)process3;
     
     uart_puts("New context: LR=");
     uart_hex(new->ctx.lr);
