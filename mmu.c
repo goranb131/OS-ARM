@@ -63,6 +63,9 @@ l1[1] = L1_DESC(1, 0, AP_RW_EL1);
 /* 2-3 GiB user code+stack  EL0 RW/X*/
 l1[2] = L1_DESC(2, 0, AP_RW_EL0);
 
+uart_puts("L1[2]: ");
+uart_hex(l1[2]);
+uart_puts("\n");
 
     uart_puts("L1 identity blocks set\n");
 

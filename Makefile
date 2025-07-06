@@ -1,18 +1,21 @@
-# Makefile LLD/Clang
-CC      = clang
-AS      = clang
+CC      = cc
+AS      = cc
 CFLAGS  = --target=aarch64-elf -march=armv8-a -ffreestanding -nostdlib -Iinclude
 LDFLAGS = -fuse-ld=lld -T linker.ld
 
-OBJS = boot.o enter_usermode.o kernel.o uart.o ramfs.o exceptions.o timer.o gic.o mmu.o process.o context_switch.o process_test.o vfs.o kmalloc.o string.o abyssfs.o message.o namespace.o shell.o uart_debug.o user_stub.o
+OBJS = boot.o enter_usermode.o kernel.o uart.o ramfs.o exceptions.o exceptions_c.o \
+       timer.o gic.o mmu.o process.o context_switch.o vfs.o kmalloc.o \
+       string.o abyssfs.o message.o namespace.o shell.o uart_debug.o user_shell_bin.o
 
-all: kernel.elf
+# Default target
+all: kernel.elf user_shell.bin
 
+# Kernel build
 boot.o: boot.S
 	$(AS) $(CFLAGS) -c boot.S -o boot.o
 
 enter_usermode.o: enter_usermode.S
-	$(AS) $(CFLAGS) -c $< -o $@
+	$(AS) $(CFLAGS) -c enter_usermode.S -o enter_usermode.o
 
 kernel.o: kernel.c
 	$(CC) $(CFLAGS) -c kernel.c -o kernel.o
@@ -25,6 +28,9 @@ ramfs.o: ramfs.c
 
 exceptions.o: exceptions.S
 	$(AS) $(CFLAGS) -c exceptions.S -o exceptions.o
+
+exceptions_c.o: exceptions.c
+	$(CC) $(CFLAGS) -c exceptions.c -o exceptions_c.o
 
 timer.o: timer.c
 	$(CC) $(CFLAGS) -c timer.c -o timer.o
@@ -65,11 +71,25 @@ namespace.o: namespace.c
 shell.o: shell.c
 	$(CC) $(CFLAGS) -c shell.c -o shell.o
 
-user_stub.o: user_stub.S
-	$(AS) $(CFLAGS) -c $< -o $@
+uart_debug.o: uart_debug.c
+	$(CC) $(CFLAGS) -c uart_debug.c -o uart_debug.o
 
+# User shell build (assembly version) 
+user_shell.o: user_shell.S
+	$(CC) $(CFLAGS) -c user_shell.S -o user_shell.o
+
+user_shell.elf: user_shell.o
+	$(CC) $(CFLAGS) -T user_linker.ld -nostdlib user_shell.o -o user_shell.elf
+
+user_shell.bin: user_shell.elf
+	llvm-objcopy -O binary user_shell.elf user_shell.bin
+
+user_shell_bin.o: user_shell.bin
+	llvm-objcopy --input-target binary --output-target elf64-littleaarch64 --binary-architecture aarch64 user_shell.bin user_shell_bin.o
+
+# Kernel link 
 kernel.elf: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o kernel.elf
 
 clean:
-	rm -f *.o kernel.elf
+	rm -f *.o kernel.elf user_shell.elf user_shell.bin

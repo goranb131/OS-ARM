@@ -1,3 +1,5 @@
+// kernel.c
+
 #include "uart.h"
 #include "ramfs.h"
 #include "timer.h"
@@ -19,14 +21,17 @@ void test_messages(void);
 void test_namespaces(void);
 void test_ipc(void);
 void test_processes(void);
-void test_exec(void);
+//void test_exec(void);
 
 extern void enter_usermode(unsigned long pc, unsigned long sp)
         __attribute__((noreturn, naked));
 
+        extern unsigned char _binary_user_shell_bin_start[];
+extern unsigned char _binary_user_shell_bin_end[];
+
 /* 0x8000 0000 user_stub.S */
-extern void _user_start(void);
-extern void process3(void);      
+/*extern void _user_start(void);
+extern void process3(void);  */    
 
 void print_mmu_blocks(void)
 {
@@ -36,10 +41,29 @@ void print_mmu_blocks(void)
 
 void kernel_main(void)
 {
-    uart_init();
-    uart_puts("ChthonOS v0.1.0\n----------------\nBooting…\n\n");
 
-    /* subsystems that do **not** enable interrupts */
+    size_t user_shell_size = _binary_user_shell_bin_end - _binary_user_shell_bin_start;
+    unsigned char *dest = (unsigned char *)0x80000000;
+    unsigned char *src = _binary_user_shell_bin_start;
+    for (size_t i = 0; i < user_shell_size; ++i) {
+        dest[i] = src[i];
+    }
+    uart_puts("User shell loaded to 0x80000000, size: ");
+    uart_hex(user_shell_size);
+    uart_puts(" bytes (hex)\n");
+
+    uart_puts("First 16 bytes of user shell: ");
+    for (size_t i = 0; i < 16; ++i) {
+        uart_hex(dest[i]);
+        uart_puts(" ");
+    }
+    uart_puts("\n");
+
+
+    uart_init();
+    //uart_puts("Booting…\n\n");
+
+    /* subsystems that do not enable interrupts */
     mmu_init();
     process_init();
     vfs_init();
@@ -54,29 +78,50 @@ void kernel_main(void)
 
 
     /* interactive shell while still in EL1 , comment out to test and work on EL0*/
-    uart_puts("\n=== kernel shell (EL1) — type \"exit\" to continue ===\n");
+    //uart_puts("\n=== kernel shell (EL1) — type \"exit\" to continue ===\n");
     //shell();                   
-    uart_puts("Shell exited; continuing boot…\n\n");
+    //uart_puts("Shell exited; continuing boot…\n\n");
 
     /* enable timer/GIC and create EL0 task */
     timer_init();
     gic_init();
 
-    process_t *user = process_create(_user_start);
+    // was for running shell in EL1
+    /*process_t *user = process_create(_user_start);
+    user->sp    = 0x80000000 + 0x10000;
+    user->state = PROC_READY;*/
+
+    // for EL0 process
+    process_t *user = process_create((void*)0x80000000); // address, not _user_start!
+
+    if (!user) {
+        uart_puts("PANIC: Failed to create user process!\n");
+        while (1) asm volatile ("wfe");
+    }
+
     user->sp    = 0x80000000 + 0x10000;
     user->state = PROC_READY;
 
+
+    uart_puts("user code @ 0x80000000: ");
+    for (int i = 0; i < 16; ++i) {
+        unsigned char b = ((volatile unsigned char*)0x80000000)[i];
+        uart_hex(b);
+        uart_puts(" ");
+    }
+    uart_puts("\n");
+
     /* drop to EL0  */
-    uart_puts("Dropping to EL0!\n");
-    uart_puts("user->ctx.pc: "); uart_hex(user->ctx.pc); uart_puts("\n");
-    uart_puts("user->sp:     "); uart_hex(user->sp);     uart_puts("\n");
+   // uart_puts("Dropping to EL0!\n");
+   // uart_puts("user->ctx.pc: "); uart_hex(user->ctx.pc); uart_puts("\n");
+   // uart_puts("user->sp:     "); uart_hex(user->sp);     uart_puts("\n");
 
     print_mmu_blocks();
 
-    uart_puts("=== About to enter_usermode ===\n");
+    /*uart_puts("=== About to enter_usermode ===\n");
     uart_puts("Address of enter_usermode: ");
     uart_hex((unsigned long)&enter_usermode); uart_puts("\n");
-    uart_puts("!!! PRE-JUMP !!!\n");
+    uart_puts("!!! PRE-JUMP !!!\n");*/
 
     uint64_t cur_el;
     asm volatile ("mrs %0, CurrentEL" : "=r"(cur_el));
@@ -88,6 +133,16 @@ void kernel_main(void)
         for (;;)
             asm volatile("wfe");
     }
+
+    extern char stack_top[];
+    uart_puts("stack_top: "); uart_hex((unsigned long)stack_top); uart_puts("\n");
+
+    extern char _bss_end[];
+    uart_puts("_bss_end: "); uart_hex((unsigned long)_bss_end); uart_puts("\n");
+
+    // user binary destination
+    uart_puts("user_shell at: "); uart_hex((unsigned long)dest); uart_puts("\n");
+    uart_puts("user stack top: "); uart_hex(user->sp); uart_puts("\n");
 
     __asm__ __volatile__(
         "mov x0, %0\n"
@@ -206,7 +261,7 @@ void test_processes(void)
     }
 }
 
-void test_exec(void)
+/*void test_exec(void)
 {
     struct Message msg = {
         .type  = MSG_EXEC,
@@ -215,7 +270,7 @@ void test_exec(void)
         .argv  = (char*[]){"test", NULL}
     };
     send_message(&msg);
-}
+}*/
 
 /* old _user_entry stays but not used anymore */
 void _user_entry(void)
